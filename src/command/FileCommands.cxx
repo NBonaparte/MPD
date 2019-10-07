@@ -330,3 +330,43 @@ handle_read_picture(Client &client, Request args, Response &r)
 	handler.RethrowError();
 	return CommandResult::OK;
 }
+
+gcc_pure
+static bool
+IsValidLyrics(const StringView s) noexcept
+{
+	for (const char ch : s) {
+		if ((unsigned char)ch < 0x20 && (unsigned char)ch != 0x10 && (unsigned char)ch != 0x13)
+			return false;
+	}
+
+	return true;
+}
+
+class PrintLyricsHandler final : public NullTagHandler {
+	Response &response;
+
+public:
+	explicit PrintLyricsHandler(Response &_response) noexcept
+		:NullTagHandler(WANT_PAIR), response(_response) {}
+
+	// OnTag (TAG_LYRICS) or OnPair?
+	void OnPair(StringView key, StringView value) noexcept override {
+		if ((key == "USLT" || key == "Lyrics") && IsValidLyrics(value))
+			response.Format("%.*s: %.*s\n",
+					int(key.size), key.data,
+					int(value.size), value.data);
+	}
+};
+
+CommandResult
+handle_read_lyrics(Client &client, Request args, Response &r)
+{
+	assert(args.size == 1);
+
+	const char *const uri = args.front();
+
+	PrintLyricsHandler handler(r);
+	TagScanAny(client, uri, handler);
+	return CommandResult::OK;
+}
